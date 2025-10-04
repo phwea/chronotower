@@ -43,4 +43,4 @@ A browser roguelite built with pure **HTML, CSS, and JavaScript** — no engines
 
 ## 📜 License
 
-MIT License © 2025 Your Name
+MIT License © 2025 phwea
