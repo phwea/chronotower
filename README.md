@@ -6,7 +6,7 @@ A browser roguelite built with pure **HTML, CSS, and JavaScript** — no engines
 ---
 
 ## 🎮 Play Now
-👉 [Play on GitHub Pages](https://phwea.github.io/chronotower/)
+👉 [Play](https://phwea.github.io/chronotower/)
 
 ---
 
