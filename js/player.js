@@ -58,7 +58,14 @@
     p.pos.x = Math.max(0, Math.min((level.width||960) - p.size.w, p.pos.x));
 
     // Collisions with platforms -> sets onGround
-    p.onGround = LevelGen.resolvePlatformCollision(p, level);
+    const surfaceInfo = LevelGen.resolvePlatformCollision(p, level);
+    p.onGround = surfaceInfo.onGround;
+    if(surfaceInfo.surface){
+      p.pos.x += surfaceInfo.surface.motionDx || 0;
+      p.pos.y += surfaceInfo.surface.motionDy || 0;
+    }
+    // Re-clamp inside canvas after platform motion
+    p.pos.x = Math.max(0, Math.min((level.width||960) - p.size.w, p.pos.x));
 
     // Rewind sampling: store past positions each 60ms
     p.rewindTimer += dt;

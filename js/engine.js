@@ -14,8 +14,26 @@
   const params = new URLSearchParams(location.search);
   let currentLevel = params.has('load') || params.has('continue') ? save.level : 1;
 
+  function freshSeed(){
+    return Math.floor(Math.random() * 0xffffffff);
+  }
+
+  let levelSeed;
+  if(params.has('load') || params.has('continue')){
+    levelSeed = typeof save.currentSeed === 'number' ? save.currentSeed : freshSeed();
+    if(save.currentSeed !== levelSeed){
+      save.currentSeed = levelSeed;
+      Storage.write(save);
+    }
+  }else{
+    levelSeed = freshSeed();
+    save.level = currentLevel;
+    save.currentSeed = levelSeed;
+    Storage.write(save);
+  }
+
   // Create level layout
-  let level = LevelGen.generateLevel(currentLevel, W, H);
+  let level = LevelGen.generateLevel(currentLevel, W, H, levelSeed);
   level.width = W; level.height = H;
 
   // Player
@@ -49,24 +67,44 @@
     hudStam.textContent = `Time Power: ${pct}%`;
   }
 
+  function clamp(v, min, max){
+    return Math.max(min, Math.min(max, v));
+  }
+
   // Simple hazard collision check
   function hitHazard(){
+    const rect = { x: player.pos.x, y: player.pos.y, w: player.size.w, h: player.size.h };
     for(const h of level.hazards){
-      if(rectOverlap(player, h)) return true;
+      if(h.type === 'spike'){
+        if(rectOverlapRect(rect, h)) return true;
+      }else if(h.type === 'saw'){
+        if(circleRectOverlap(h, rect)) return true;
+      }else if(h.type === 'flame'){
+        if(h.active && rectOverlapRect(rect, h)) return true;
+      }
     }
     return false;
   }
 
-  function rectOverlap(p, r){
-    return p.pos.x < r.x + r.w &&
-           p.pos.x + p.size.w > r.x &&
-           p.pos.y < r.y + r.h &&
-           p.pos.y + p.size.h > r.y;
+  function rectOverlapRect(a, b){
+    return a.x < b.x + b.w &&
+           a.x + a.w > b.x &&
+           a.y < b.y + b.h &&
+           a.y + a.h > b.y;
+  }
+
+  function circleRectOverlap(circle, rect){
+    const nearestX = clamp(circle.x, rect.x, rect.x + rect.w);
+    const nearestY = clamp(circle.y, rect.y, rect.y + rect.h);
+    const dx = circle.x - nearestX;
+    const dy = circle.y - nearestY;
+    return dx*dx + dy*dy <= circle.radius * circle.radius;
   }
 
   // Check reaching exit
   function reachedExit(){
-    return rectOverlap(player, level.exit);
+    const rect = { x: player.pos.x, y: player.pos.y, w: player.size.w, h: player.size.h };
+    return rectOverlapRect(rect, level.exit);
   }
 
   // Reward and advance floors; every 5th floor: redirect to shop
@@ -76,6 +114,8 @@
     currentLevel += 1;
     save.level = currentLevel;
     save.bestLevel = Math.max(save.bestLevel, currentLevel);
+    levelSeed = freshSeed();
+    save.currentSeed = levelSeed;
     Storage.write(save);
 
     // Every 5 floors go to shop
@@ -84,7 +124,7 @@
       return;
     }
     // Otherwise regenerate level and reset player
-    level = LevelGen.generateLevel(currentLevel, W, H);
+    level = LevelGen.generateLevel(currentLevel, W, H, levelSeed);
     level.width = W; level.height = H;
     player.pos.x = 80; player.pos.y = H - 120;
     player.vel.x = 0; player.vel.y = 0;
@@ -97,8 +137,10 @@
     const blockStart = Math.max(1, currentLevel - ((currentLevel-1)%5));
     currentLevel = blockStart;
     save.level = currentLevel;
+    levelSeed = freshSeed();
+    save.currentSeed = levelSeed;
     Storage.write(save);
-    level = LevelGen.generateLevel(currentLevel, W, H);
+    level = LevelGen.generateLevel(currentLevel, W, H, levelSeed);
     level.width = W; level.height = H;
     player.pos.x = 80; player.pos.y = H - 120;
     player.vel.x = 0; player.vel.y = 0;
@@ -122,21 +164,45 @@
     ctx.globalAlpha = 1.0;
 
     // Platforms
-    ctx.fillStyle = '#6aa9ff';
     for(const p of level.platforms){
+      ctx.fillStyle = p.moving ? '#5f97ff' : '#6aa9ff';
       ctx.fillRect(p.x, p.y, p.w, p.h);
+      if(p.moving){
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(p.x, p.y, p.w, 4);
+      }
     }
 
     // Hazards (spikes)
-    ctx.fillStyle = '#ff6a6a';
     for(const h of level.hazards){
-      ctx.beginPath();
-      // little triangle spikes
-      ctx.moveTo(h.x, h.y + h.h);
-      ctx.lineTo(h.x + h.w/2, h.y);
-      ctx.lineTo(h.x + h.w, h.y + h.h);
-      ctx.closePath();
-      ctx.fill();
+      if(h.type === 'spike'){
+        ctx.fillStyle = '#ff6a6a';
+        ctx.beginPath();
+        ctx.moveTo(h.x, h.y + h.h);
+        ctx.lineTo(h.x + h.w/2, h.y);
+        ctx.lineTo(h.x + h.w, h.y + h.h);
+        ctx.closePath();
+        ctx.fill();
+      }else if(h.type === 'saw'){
+        ctx.save();
+        ctx.translate(h.x, h.y);
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath();
+        ctx.arc(0, 0, h.radius, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(h.radius, 0);
+        ctx.stroke();
+        ctx.restore();
+      }else if(h.type === 'flame'){
+        ctx.fillStyle = h.active ? 'rgba(255,120,60,0.9)' : 'rgba(180,180,200,0.35)';
+        ctx.fillRect(h.x, h.y, h.w, h.h);
+        ctx.fillStyle = '#8c4a16';
+        ctx.fillRect(h.x, h.y + h.h, h.w, 10);
+      }
     }
 
     // Exit door
@@ -171,6 +237,8 @@
     // Apply time powers (returns timeScale)
     const timeScale = Player.applyTimePowers(player, dt);
     dt *= timeScale;
+
+    LevelGen.updateLevel(level, dt);
 
     // Physics & collisions
     Player.updatePlayer(player, level, dt);
