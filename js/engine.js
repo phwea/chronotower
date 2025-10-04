@@ -81,6 +81,8 @@
         if(circleRectOverlap(h, rect)) return true;
       }else if(h.type === 'flame'){
         if(h.active && rectOverlapRect(rect, h)) return true;
+      }else if(h.type === 'crusher'){
+        if(rectOverlapRect(rect, h)) return true;
       }
     }
     return false;
@@ -198,10 +200,29 @@
         ctx.stroke();
         ctx.restore();
       }else if(h.type === 'flame'){
-        ctx.fillStyle = h.active ? 'rgba(255,120,60,0.9)' : 'rgba(180,180,200,0.35)';
-        ctx.fillRect(h.x, h.y, h.w, h.h);
+        ctx.save();
+        ctx.translate(h.x + h.w/2, h.y + h.h);
+        ctx.scale(1, h.active ? 1 : 0.25);
+        const gradient = ctx.createLinearGradient(0, -h.h, 0, 0);
+        gradient.addColorStop(0, '#ffeab3');
+        gradient.addColorStop(1, '#ff7a33');
+        ctx.fillStyle = h.active ? gradient : 'rgba(120,120,160,0.3)';
+        ctx.beginPath();
+        ctx.moveTo(-h.w/2, 0);
+        ctx.quadraticCurveTo(0, -h.h, h.w/2, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
         ctx.fillStyle = '#8c4a16';
         ctx.fillRect(h.x, h.y + h.h, h.w, 10);
+      }else if(h.type === 'crusher'){
+        ctx.fillStyle = '#d85f5f';
+        ctx.fillRect(h.x, h.y, h.w, h.h);
+        ctx.strokeStyle = '#2b1b1b';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(h.x, h.y, h.w, h.h);
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(h.x, h.y, h.w, 6);
       }
     }
 

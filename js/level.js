@@ -26,6 +26,31 @@
     return min + rng() * (max - min);
   }
 
+  const MAX_GAP = 220;
+  const MIN_RISE = 28;
+  const MAX_RISE = 140;
+
+  function ensureReachableX(previous, width, platformWidth, desiredX){
+    const prevCenter = previous.x + previous.w * 0.5;
+    const half = platformWidth * 0.5;
+    const minCenter = Math.max(half + 32, prevCenter - MAX_GAP);
+    const maxCenter = Math.min(width - half - 32, prevCenter + MAX_GAP);
+    let center = clamp(desiredX + half, minCenter, maxCenter);
+    if(minCenter > maxCenter){
+      center = clamp(prevCenter, half + 32, width - half - 32);
+    }
+    return Math.round(center - half);
+  }
+
+  function ensureReachableY(previous, floorY, desiredY){
+    const minY = Math.max(60, previous.y - MAX_RISE);
+    const maxY = Math.min(previous.y - MIN_RISE, floorY - 120);
+    if(minY > maxY){
+      return Math.round(Math.max(60, previous.y - MIN_RISE));
+    }
+    return Math.round(clamp(desiredY, minY, maxY));
+  }
+
   function makePlatform(x, y, w, opts){
     const platform = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: 14, motionDx: 0, motionDy: 0 };
     if(opts && opts.moving){
@@ -87,6 +112,31 @@
     };
   }
 
+  function placeCrusher(rng, x, y, height, difficulty){
+    const w = 44 + Math.floor(rng()*16);
+    const h = 28 + Math.floor(rng()*10);
+    const travel = Math.min(height, 70 + rng()*60 + difficulty * 40);
+    const range = Math.max(36, travel * 0.5);
+    const originY = Math.round(y);
+    const time = rng() * Math.PI * 2;
+    const crusher = {
+      type: 'crusher',
+      x: Math.round(x - w/2),
+      y: Math.round(originY + Math.sin(time) * range),
+      w: Math.round(w),
+      h: Math.round(h),
+      range,
+      speed: 0.9 + rng()*0.7 + difficulty * 0.4,
+      originX: Math.round(x - w/2),
+      originY,
+      axis: 'y',
+      time,
+      motionDx: 0,
+      motionDy: 0
+    };
+    return crusher;
+  }
+
   function buildStairsSegment(state){
     const { rng, width, floorY, difficulty, anchor } = state;
     const platforms = [];
@@ -99,8 +149,9 @@
       const horiz = 60 + rng()*120;
       const direction = rng() < 0.25 ? -1 : 1;
       let x = previous.x + previous.w/2 + direction * horiz;
-      x = clamp(x, 32, width - w - 32);
-      const y = clamp(previous.y - rise, 70, floorY - 120);
+      x = ensureReachableX(previous, width, w, x);
+      const desiredY = previous.y - rise;
+      const y = ensureReachableY(previous, floorY, desiredY);
       const platform = makePlatform(x, y, w);
       platforms.push(platform);
       previous = platform;
@@ -124,8 +175,9 @@
       const rise = 44 + rng()*(50 + difficulty*30);
       const horizontal = 90 + rng()*140;
       let x = previous.x + dir * horizontal;
-      x = clamp(x, 32, width - w - 32);
-      const y = clamp(previous.y - rise, 60, floorY - 140);
+      x = ensureReachableX(previous, width, w, x);
+      const desiredY = previous.y - rise;
+      const y = ensureReachableY(previous, floorY, desiredY);
       const platform = makePlatform(x, y, w);
       platforms.push(platform);
       if(rng() < 0.35 + difficulty*0.35){
@@ -150,13 +202,14 @@
     const gap = 180 + rng()*140;
     const destinationW = 140 + Math.floor(rng()*140);
     let destX = anchor.x + anchor.w + gap;
-    destX = clamp(destX, 60, width - destinationW - 40);
-    const destY = clamp(anchor.y - (36 + rng()*60), 70, floorY - 140);
+    destX = ensureReachableX(anchor, width, destinationW, destX);
+    const destY = ensureReachableY(anchor, floorY, anchor.y - (36 + rng()*60));
     const destPlatform = makePlatform(destX, destY, destinationW);
 
     const moverWidth = 120;
-    const leftBound = clamp(anchor.x + anchor.w - moverWidth + 6, 32, width - moverWidth - 32);
-    const rightBound = clamp(destPlatform.x + 12, leftBound + 40, width - moverWidth - 32);
+    const leftBound = clamp(anchor.x + anchor.w - moverWidth + 16, 32, width - moverWidth - 32);
+    const rightTarget = destPlatform.x - 12;
+    const rightBound = clamp(Math.max(rightTarget, leftBound + 60), leftBound + 40, width - moverWidth - 32);
     const originX = (leftBound + rightBound) * 0.5;
     const range = Math.max(60, (rightBound - leftBound) * 0.5);
     const moverYBottom = anchor.y - 34;
@@ -195,8 +248,8 @@
     const platforms = [];
     const hazards = [];
     const landingW = 120 + Math.floor(rng()*120);
-    const landingX = clamp(anchor.x + anchor.w/2 + (rng() - 0.5) * 120, 32, width - landingW - 32);
-    const landingY = clamp(anchor.y - (120 + rng()*60), 60, floorY - 160);
+    const landingX = ensureReachableX(anchor, width, landingW, anchor.x + anchor.w/2 + (rng() - 0.5) * 120);
+    const landingY = ensureReachableY(anchor, floorY, anchor.y - (120 + rng()*60));
     const landing = makePlatform(landingX, landingY, landingW);
 
     const elevatorWidth = 120;
@@ -244,8 +297,9 @@
       const w = 90 + Math.floor(rng()*70);
       const rise = 36 + rng()*44;
       let x = previous.x + (rng() - 0.5) * 220;
-      x = clamp(x, 32, width - w - 32);
-      const y = clamp(previous.y - rise, 60, floorY - 160);
+      x = ensureReachableX(previous, width, w, x);
+      const desiredY = previous.y - rise;
+      const y = ensureReachableY(previous, floorY, desiredY);
       const platform = makePlatform(x, y, w);
       platforms.push(platform);
       previous = platform;
@@ -261,7 +315,62 @@
     return { platforms, hazards, anchor: previous };
   }
 
-  const SEGMENTS = [buildStairsSegment, buildSwitchbackSegment, buildMovingBridgeSegment, buildVerticalLiftSegment, buildScatterSegment];
+  function buildGauntletSegment(state){
+    const { rng, width, floorY, difficulty, anchor } = state;
+    const platforms = [];
+    const hazards = [];
+    let previous = anchor;
+    const steps = 3 + Math.floor(rng()*2);
+    let direction = rng() < 0.5 ? -1 : 1;
+    for(let i=0;i<steps;i++){
+      const w = 110 + Math.floor(rng()*90);
+      const horizontal = 80 + rng()*110;
+      let x = previous.x + direction * horizontal;
+      x = ensureReachableX(previous, width, w, x);
+      const desiredY = previous.y - (44 + rng()*50);
+      const y = ensureReachableY(previous, floorY, desiredY);
+      const moving = rng() < 0.4;
+      const platform = makePlatform(x, y, w, moving ? {
+        moving: {
+          axis: 'x',
+          range: 30 + rng()*30,
+          speed: 0.8 + rng()*0.6 + difficulty * 0.3,
+          time: rng()*Math.PI*2
+        }
+      } : undefined);
+      if(platform.moving){
+        platform.moving.originX = platform.x;
+        platform.moving.originY = platform.y;
+      }
+      platforms.push(platform);
+      if(rng() < 0.4 + difficulty*0.25){
+        const sawAxis = rng() < 0.5 ? 'x' : 'y';
+        const saw = placeSaw(rng, platform.x + platform.w/2, platform.y - 40, sawAxis, difficulty);
+        hazards.push(saw);
+      }
+      previous = platform;
+      direction *= -1;
+    }
+
+    if(platforms.length){
+      const target = platforms[Math.floor(platforms.length/2)];
+      if(target && rng() < 0.65){
+        const crusher = placeCrusher(rng, target.x + target.w/2, target.y - 20, 80 + difficulty*30, difficulty);
+        hazards.push(crusher);
+      }
+    }
+
+    return { platforms, hazards, anchor: previous };
+  }
+
+  const SEGMENTS = [
+    buildStairsSegment,
+    buildSwitchbackSegment,
+    buildMovingBridgeSegment,
+    buildVerticalLiftSegment,
+    buildScatterSegment,
+    buildGauntletSegment
+  ];
 
   // Create a random set of platforms with varied patterns that always rise towards the exit.
   function generateLevel(floor, width, height, seed){
@@ -278,7 +387,9 @@
       exit: null,
       groundH,
       seed: baseSeed,
-      elapsed: 0
+      elapsed: 0,
+      width,
+      height
     };
 
     // Start platform near bottom providing safe landing
@@ -310,8 +421,8 @@
 
     // Final bridge near the exit to guarantee completion
     const finalW = 180 + Math.floor(rng()*120);
-    const finalY = clamp(anchor.y - (40 + rng()*40), 60, floorY - 180);
-    const finalX = clamp(width - finalW - 60, 40, width - finalW - 40);
+    const finalY = ensureReachableY(anchor, floorY, anchor.y - (40 + rng()*40));
+    const finalX = ensureReachableX(anchor, width, finalW, width - finalW - 80);
     const finalPlatform = makePlatform(finalX, finalY, finalW);
     level.platforms.push(finalPlatform);
 
@@ -370,6 +481,13 @@
           h.y = h.originY + offset;
         }
         h.motionDx = h.x - prevX;
+        h.motionDy = h.y - prevY;
+      }else if(h?.type === 'crusher'){
+        const prevY = h.y;
+        h.time += dt * h.speed;
+        const offset = Math.sin(h.time) * h.range;
+        h.y = h.originY + offset;
+        h.motionDx = 0;
         h.motionDy = h.y - prevY;
       }else if(h?.type === 'flame'){
         h.timer += dt;
