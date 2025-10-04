@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chrono Tower — Run</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="game-bg">
+  <div class="hud">
+    <div id="hud-level">Floor: 1</div>
+    <div id="hud-coins">Shards: 0</div>
+    <div id="hud-stamina">Time Power: 100%</div>
+    <div id="hud-tip">Q: Rewind • E: Slow • Esc: Pause</div>
+  </div>
+
+  <canvas id="game" width="960" height="540"></canvas>
+
+  <div id="pauseOverlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2>Paused</h2>
+      <a class="btn" id="btnResume" href="#">Resume</a>
+      <a class="btn" href="shop.html">Checkpoint Shop</a>
+      <a class="btn" href="index.html">Quit to Menu</a>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/engine.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chrono Tower — Shop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="shop-bg">
+  <div class="frame">
+    <h1 class="title">Checkpoint Shop</h1>
+    <p class="subtitle">spend time shards to empower your climb</p>
+
+    <div class="panel">
+      <div id="shopStats"></div>
+    </div>
+
+    <div class="shop-grid">
+      <button class="card" data-upgrade="speed">
+        <h3>Footwork +</h3>
+        <p>Move speed +10% (stacks)</p>
+        <p class="cost">Cost: 30 shards</p>
+      </button>
+      <button class="card" data-upgrade="jump">
+        <h3>Light Step +</h3>
+        <p>Jump force +10% (stacks)</p>
+        <p class="cost">Cost: 30 shards</p>
+      </button>
+      <button class="card" data-upgrade="stamina">
+        <h3>Sands of Time +</h3>
+        <p>Max time power +20%</p>
+        <p class="cost">Cost: 40 shards</p>
+      </button>
+      <button class="card" data-upgrade="regen">
+        <h3>Temporal Weave</h3>
+        <p>Stamina regen +20%</p>
+        <p class="cost">Cost: 40 shards</p>
+      </button>
+    </div>
+
+    <div class="menu">
+      <a class="btn" href="game.html?continue=1">Continue Climb</a>
+      <a class="btn" href="index.html">Back to Menu</a>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/shop.js"></script>
+</body>
+</html>
