@@ -9,6 +9,7 @@
     level: 1,
     coins: 0,           // "time shards"
     bestLevel: 1,
+    currentSeed: null,
     upgrades: {         // basic permanent shop upgrades
       speed: 0,
       jump: 0,
