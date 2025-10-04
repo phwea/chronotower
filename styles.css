@@ -20,6 +20,7 @@ html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-
 .menu{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:16px 0}
 .btn{display:inline-block;background:var(--accent);color:#1a1a1a;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;box-shadow:0 6px 20px #0005}
 .btn:hover{filter:brightness(0.95)}
+.btn.disabled{opacity:0.55;pointer-events:none;filter:grayscale(0.2)}
 
 .panel{background:linear-gradient(180deg,#111a35,#0b1020);border:1px solid #22305c;border-radius:12px;padding:16px;margin:16px 0;box-shadow:0 8px 30px #0007}
 .panel h2{margin-top:0}
@@ -37,5 +38,6 @@ canvas#game{display:block;margin:80px auto 20px;border:1px solid #24386d;border-
 .overlay{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center}
 .hidden{display:none}
 .overlay-content{background:#111a35;border:1px solid #2a3d6e;border-radius:12px;padding:20px;min-width:300px;text-align:center}
+.overlay .menu{flex-direction:column;gap:10px;margin-top:12px}
 
 .footnote{opacity:.7;text-align:center;margin-top:18px}

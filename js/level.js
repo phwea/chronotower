@@ -1,125 +1,227 @@
 /* level.js
-   Generates simple platform layouts per floor and handles collision helpers.
+   Procedural sector generator for Chrono Shift. Produces tile-based arenas with
+   guaranteed traversable paths, hazard placements, and enemy spawn schedules.
 */
-(function(){
-  // Axis-aligned rectangle collision helper
-  function aabb(ax, ay, aw, ah, bx, by, bw, bh){
-    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-  }
+(function () {
+  const TILE_SIZE = 48;
+  const GRID_WIDTH = 20;
+  const GRID_HEIGHT = 11;
 
-  function createRng(seed){
-    let a = seed >>> 0;
-    if(a === 0) a = 0x9e3779b1;
-    return function(){
-      a += 0x6d2b79f5;
-      let t = Math.imul(a ^ a >>> 15, 1 | a);
-      t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  function mulberry32(a) {
+    return function () {
+      let t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
 
-  function clamp(v, min, max){
-    return Math.max(min, Math.min(max, v));
+  function carveFloor(tiles, x, y) {
+    if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) return;
+    tiles[y * GRID_WIDTH + x] = 0;
   }
 
-  // Create a random set of platforms that "staircase" upward.
-  function generateLevel(floor, width, height, seed){
-    const baseSeed = typeof seed === 'number' ? Math.floor(seed) : Math.floor(Math.random()*0xffffffff);
-    const rng = createRng(baseSeed ^ (floor * 0x9e3779b1));
-    const platforms = [];
-
-    const groundH = 24;
-    const floorY = height - groundH;
-
-    // Start platform near bottom providing safe landing
-    const startPlatform = {x: 40, y: floorY - 40, w: 220, h: 16};
-    platforms.push(startPlatform);
-
-    let previous = startPlatform;
-    let y = previous.y;
-    const climbCount = 6 + Math.min(6, Math.floor(floor/2));
-
-    for(let i=0;i<climbCount;i++){
-      const w = 140 + Math.floor(rng()*140);
-      const riseMin = 42;
-      const riseMax = 76 + Math.min(30, floor*3);
-      y = Math.max(90, y - (riseMin + rng()*(riseMax - riseMin)));
-
-      const progress = climbCount <= 1 ? 1 : i / (climbCount - 1);
-      const drift = (rng() - 0.25) * 160;
-      let desired = previous.x + previous.w * 0.6 + drift + progress * 150;
-      const minX = clamp(previous.x - 120 + progress * 60, 20, width - w - 20);
-      const maxX = clamp(previous.x + previous.w - 40 + 160 + progress * 160, 20, width - w - 20);
-      const x = clamp(desired, minX, maxX);
-
-      const platform = {x: Math.round(x), y: Math.round(y), w, h: 14};
-      platform.x = clamp(platform.x, 20, width - platform.w - 20);
-      platforms.push(platform);
-      previous = platform;
-    }
-
-    // Ensure we have a landing close to the exit on the right side
-    if(previous.x + previous.w < width - 140){
-      const bridge = {
-        x: Math.round(clamp(previous.x + previous.w - 80, 40, width - 240)),
-        y: Math.round(Math.max(80, previous.y - (30 + rng()*30))),
-        w: 240,
-        h: 14
-      };
-      platforms.push(bridge);
-      previous = bridge;
-    }
-
-    // Exit door aligns with the final platform
-    const exit = {
-      x: Math.round(clamp(previous.x + previous.w - 50, previous.x + 20, width - 60)),
-      y: Math.round(previous.y - 60),
-      w: 40,
-      h: 60
-    };
-
-    // A few hazards (spikes) placed only on intermediate platforms
-    const hazards = [];
-    const hazardPool = platforms.slice(1, -1).filter(p => p.w > 80);
-    const hazardCount = Math.min(hazardPool.length, 2 + Math.floor((floor + 1)/3));
-    for(let i=0;i<hazardCount;i++){
-      const p = hazardPool[Math.floor(rng()*hazardPool.length)];
-      const span = p.w - 56;
-      const hx = span > 0 ? p.x + 16 + Math.floor(rng()*span) : p.x + p.w/2 - 14;
-      hazards.push({x: Math.round(hx), y: p.y - 10, w: 28, h: 10});
-    }
-
-    return { platforms, exit, hazards, groundH, seed: baseSeed };
+  function isPathTile(pathSet, x, y) {
+    return pathSet.has(y * GRID_WIDTH + x);
   }
 
-  // Resolve vertical collision with platforms (very simple)
-  function resolvePlatformCollision(player, level){
-    const rect = {x: player.pos.x, y: player.pos.y, w: player.size.w, h: player.size.h};
-    let onGround = false;
+  function carvePath(tiles, rng) {
+    const pathSet = new Set();
+    let cx = 3;
+    let cy = GRID_HEIGHT - 3;
+    carveFloor(tiles, cx, cy);
+    pathSet.add(cy * GRID_WIDTH + cx);
 
-    for(const p of level.platforms){
-      if(aabb(rect.x, rect.y, rect.w, rect.h, p.x, p.y, p.w, p.h)){
-        // Coming from above: place player on top
-        if(player.vel.y > 0 && rect.y + rect.h - p.y < 16){
-          rect.y = p.y - rect.h;
-          player.vel.y = 0;
-          onGround = true;
+    while (cx < GRID_WIDTH - 4 || cy > 3) {
+      const moveHorizontal =
+        cx < GRID_WIDTH - 4 && (cy <= 3 || rng() < 0.6);
+      if (moveHorizontal) {
+        cx += 1;
+      } else {
+        cy -= 1;
+      }
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) <= 1) {
+            carveFloor(tiles, cx + dx, cy + dy);
+            pathSet.add((cy + dy) * GRID_WIDTH + (cx + dx));
+          }
         }
       }
     }
 
-    // Floor
-    const floorY = (level.height || 540) - level.groundH;
-    if(rect.y + rect.h > floorY){
-      rect.y = floorY - rect.h;
-      player.vel.y = 0;
-      onGround = true;
-    }
-
-    // Apply corrected position
-    player.pos.y = rect.y;
-    return onGround;
+    return { cx, cy, pathSet };
   }
 
-  window.LevelGen = { generateLevel, resolvePlatformCollision };
+  function addRooms(tiles, rng, depth, pathSet) {
+    const rooms = [];
+    const roomCount = 3 + Math.min(6, Math.floor(depth / 2));
+    let attempts = 0;
+    while (rooms.length < roomCount && attempts < roomCount * 10) {
+      attempts++;
+      const rw = 3 + Math.floor(rng() * 4); // 3-6 tiles
+      const rh = 3 + Math.floor(rng() * 3); // 3-5 tiles
+      const rx = 1 + Math.floor(rng() * (GRID_WIDTH - rw - 2));
+      const ry = 1 + Math.floor(rng() * (GRID_HEIGHT - rh - 2));
+
+      let overlapsPath = false;
+      for (let y = ry; y < ry + rh && !overlapsPath; y++) {
+        for (let x = rx; x < rx + rw; x++) {
+          if (isPathTile(pathSet, x, y)) {
+            overlapsPath = true;
+            break;
+          }
+        }
+      }
+      if (overlapsPath) continue;
+
+      for (let y = ry - 1; y < ry + rh + 1; y++) {
+        for (let x = rx - 1; x < rx + rw + 1; x++) {
+          carveFloor(tiles, x, y);
+        }
+      }
+      rooms.push({ rx, ry, rw, rh });
+    }
+    return rooms;
+  }
+
+  function createHazards(rng, depth, tiles, pathSet) {
+    const hazards = [];
+    const hazardBudget = 2 + Math.floor(depth * 0.6);
+    let attempts = 0;
+    while (hazards.length < hazardBudget && attempts < hazardBudget * 12) {
+      attempts++;
+      const hx = 2 + Math.floor(rng() * (GRID_WIDTH - 4));
+      const hy = 2 + Math.floor(rng() * (GRID_HEIGHT - 4));
+      if (isPathTile(pathSet, hx, hy)) continue;
+      if (tiles[hy * GRID_WIDTH + hx] !== 0) continue;
+
+      if (rng() < 0.55) {
+        hazards.push({
+          type: "pulse",
+          x: (hx + 0.5) * TILE_SIZE,
+          y: (hy + 0.5) * TILE_SIZE,
+          radius: 24 + rng() * 18,
+          period: 2.6 + rng() * 1.5,
+          active: 1.2 + rng() * 0.8,
+          offset: rng() * Math.PI * 2,
+        });
+      } else {
+        const dir = rng() < 0.5 ? "horizontal" : "vertical";
+        const length = dir === "horizontal"
+          ? 2 + Math.floor(rng() * 5)
+          : 2 + Math.floor(rng() * 4);
+        hazards.push({
+          type: "beam",
+          direction: dir,
+          x: (hx + 0.5) * TILE_SIZE,
+          y: (hy + 0.5) * TILE_SIZE,
+          length,
+          period: 3.4 + rng() * 1.3,
+          active: 1.7 + rng() * 0.7,
+          offset: rng() * Math.PI * 2,
+        });
+      }
+    }
+    return hazards;
+  }
+
+  function createPickups(rng, depth, tiles) {
+    const pickups = [];
+    const base = 2 + Math.floor(rng() * 2);
+    for (let i = 0; i < base; i++) {
+      const px = 1 + Math.floor(rng() * (GRID_WIDTH - 2));
+      const py = 1 + Math.floor(rng() * (GRID_HEIGHT - 2));
+      if (tiles[py * GRID_WIDTH + px] !== 0) continue;
+      pickups.push({
+        type: rng() < 0.35 ? "heal" : "core",
+        amount:
+          rng() < 0.35
+            ? 1
+            : 6 + Math.floor(depth * 2 + rng() * 6),
+        x: (px + 0.5) * TILE_SIZE,
+        y: (py + 0.5) * TILE_SIZE,
+      });
+    }
+    return pickups;
+  }
+
+  function createSpawns(rng, depth, tiles, pathSet) {
+    const spawns = [];
+    const budget = 4 + Math.floor(depth * 1.4);
+    let attempts = 0;
+    while (spawns.length < budget && attempts < budget * 12) {
+      attempts++;
+      const sx = 1 + Math.floor(rng() * (GRID_WIDTH - 2));
+      const sy = 1 + Math.floor(rng() * (GRID_HEIGHT - 2));
+      if (isPathTile(pathSet, sx, sy)) continue;
+      if (tiles[sy * GRID_WIDTH + sx] !== 0) continue;
+      const roll = rng();
+      let type = "chaser";
+      if (roll > 0.7) type = "ranger";
+      else if (roll > 0.45) type = "sentry";
+      spawns.push({
+        type,
+        x: (sx + 0.5) * TILE_SIZE,
+        y: (sy + 0.5) * TILE_SIZE,
+        delay: 0.8 + spawns.length * 0.4 + rng() * 0.7,
+      });
+    }
+    return spawns;
+  }
+
+  function createSector(depth, seed, save) {
+    const tiles = new Array(GRID_WIDTH * GRID_HEIGHT).fill(1);
+    const rng = mulberry32(seed >>> 0);
+
+    // Carve start area (bottom-left)
+    for (let x = 1; x <= 3; x++) {
+      for (let y = GRID_HEIGHT - 3; y < GRID_HEIGHT - 1; y++) {
+        carveFloor(tiles, x, y);
+      }
+    }
+    const start = {
+      x: (2.5) * TILE_SIZE,
+      y: (GRID_HEIGHT - 2 + 0.5) * TILE_SIZE,
+    };
+
+    // Carve exit area (top-right)
+    for (let x = GRID_WIDTH - 4; x < GRID_WIDTH - 1; x++) {
+      for (let y = 1; y <= 3; y++) {
+        carveFloor(tiles, x, y);
+      }
+    }
+    const exit = {
+      x: (GRID_WIDTH - 2.5) * TILE_SIZE,
+      y: (2.5) * TILE_SIZE,
+      radius: 32,
+    };
+
+    const { pathSet } = carvePath(tiles, rng);
+    const rooms = addRooms(tiles, rng, depth, pathSet);
+    const hazards = createHazards(rng, depth, tiles, pathSet);
+    const pickups = createPickups(rng, depth, tiles);
+    const spawns = createSpawns(rng, depth, tiles, pathSet);
+
+    return {
+      tileSize: TILE_SIZE,
+      width: GRID_WIDTH,
+      height: GRID_HEIGHT,
+      tiles,
+      start,
+      exit,
+      rooms,
+      hazards,
+      pickups,
+      spawns,
+      seed,
+      sector: depth,
+      pathTiles: Array.from(pathSet),
+    };
+  }
+
+  window.LevelGen = {
+    TILE_SIZE,
+    createSector,
+  };
 })();
