@@ -1,45 +1,89 @@
 /* storage.js
-   Centralized localStorage helpers and default save schema.
-   Everything attaches to window.Storage for simplicity (no modules).
+   Centralized localStorage helpers and default save schema for Chrono Shift.
 */
 (function () {
-  const KEY = "chrono_tower_save_v1";
+  const KEY = "chrono_shift_save_v1";
 
   const DEFAULT_SAVE = {
-    level: 1,
-    coins: 0,           // "time shards"
-    bestLevel: 1,
-    currentSeed: null,
-    upgrades: {         // basic permanent shop upgrades
-      speed: 0,
-      jump: 0,
-      stamina: 0,
-      regen: 0,
-    }
+    sector: 1,
+    credits: 0,
+    bestSector: 1,
+    currentRun: null,
+    upgrades: {
+      engine: 0,   // movement speed & dash recharge
+      focus: 0,    // maximum energy & regeneration
+      arsenal: 0,  // weapon damage & fire rate
+      chrono: 0,   // slow-time efficiency & shields
+    },
+    runs: [],
   };
+
+  function cloneDefault() {
+    return {
+      ...DEFAULT_SAVE,
+      upgrades: { ...DEFAULT_SAVE.upgrades },
+      runs: [],
+    };
+  }
 
   function read() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return { ...DEFAULT_SAVE };
+      if (!raw) return cloneDefault();
       const parsed = JSON.parse(raw);
-      // Merge with defaults to be forward-compatible
-      return { ...DEFAULT_SAVE, ...parsed, upgrades: { ...DEFAULT_SAVE.upgrades, ...(parsed.upgrades||{}) } };
+      return {
+        ...cloneDefault(),
+        ...parsed,
+        upgrades: { ...DEFAULT_SAVE.upgrades, ...(parsed.upgrades || {}) },
+        runs: Array.isArray(parsed.runs) ? [...parsed.runs] : [],
+      };
     } catch {
-      return { ...DEFAULT_SAVE };
+      return cloneDefault();
     }
   }
 
   function write(state) {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    const toSave = {
+      ...cloneDefault(),
+      ...state,
+      upgrades: { ...DEFAULT_SAVE.upgrades, ...(state.upgrades || {}) },
+      runs: Array.isArray(state.runs) ? state.runs.slice(0, 30) : [],
+    };
+    localStorage.setItem(KEY, JSON.stringify(toSave));
   }
 
   function reset() {
-    write({ ...DEFAULT_SAVE });
+    write(cloneDefault());
   }
 
-  // Simple helpers you can call anywhere
+  function appendRun(entry) {
+    const save = read();
+    const runs = Array.isArray(save.runs) ? [...save.runs] : [];
+    runs.push({
+      sector: entry.sector || 1,
+      seed: entry.seed || 0,
+      time: typeof entry.time === "number" ? entry.time : 0,
+      result: entry.result || "cleared",
+      timestamp: entry.timestamp || Date.now(),
+    });
+    runs.sort((a, b) => {
+      if (b.sector !== a.sector) return b.sector - a.sector;
+      if (a.result !== b.result) {
+        if (a.result === "cleared" && b.result !== "cleared") return -1;
+        if (b.result === "cleared" && a.result !== "cleared") return 1;
+      }
+      return a.time - b.time;
+    });
+    save.runs = runs.slice(0, 20);
+    write(save);
+    return save;
+  }
+
   window.Storage = {
-    read, write, reset, KEY
+    read,
+    write,
+    reset,
+    appendRun,
+    KEY,
   };
 })();
