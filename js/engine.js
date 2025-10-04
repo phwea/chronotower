@@ -14,8 +14,26 @@
   const params = new URLSearchParams(location.search);
   let currentLevel = params.has('load') || params.has('continue') ? save.level : 1;
 
+  function freshSeed(){
+    return Math.floor(Math.random() * 0xffffffff);
+  }
+
+  let levelSeed;
+  if(params.has('load') || params.has('continue')){
+    levelSeed = typeof save.currentSeed === 'number' ? save.currentSeed : freshSeed();
+    if(save.currentSeed !== levelSeed){
+      save.currentSeed = levelSeed;
+      Storage.write(save);
+    }
+  }else{
+    levelSeed = freshSeed();
+    save.level = currentLevel;
+    save.currentSeed = levelSeed;
+    Storage.write(save);
+  }
+
   // Create level layout
-  let level = LevelGen.generateLevel(currentLevel, W, H);
+  let level = LevelGen.generateLevel(currentLevel, W, H, levelSeed);
   level.width = W; level.height = H;
 
   // Player
@@ -76,6 +94,8 @@
     currentLevel += 1;
     save.level = currentLevel;
     save.bestLevel = Math.max(save.bestLevel, currentLevel);
+    levelSeed = freshSeed();
+    save.currentSeed = levelSeed;
     Storage.write(save);
 
     // Every 5 floors go to shop
@@ -84,7 +104,7 @@
       return;
     }
     // Otherwise regenerate level and reset player
-    level = LevelGen.generateLevel(currentLevel, W, H);
+    level = LevelGen.generateLevel(currentLevel, W, H, levelSeed);
     level.width = W; level.height = H;
     player.pos.x = 80; player.pos.y = H - 120;
     player.vel.x = 0; player.vel.y = 0;
@@ -97,8 +117,10 @@
     const blockStart = Math.max(1, currentLevel - ((currentLevel-1)%5));
     currentLevel = blockStart;
     save.level = currentLevel;
+    levelSeed = freshSeed();
+    save.currentSeed = levelSeed;
     Storage.write(save);
-    level = LevelGen.generateLevel(currentLevel, W, H);
+    level = LevelGen.generateLevel(currentLevel, W, H, levelSeed);
     level.width = W; level.height = H;
     player.pos.x = 80; player.pos.y = H - 120;
     player.vel.x = 0; player.vel.y = 0;
