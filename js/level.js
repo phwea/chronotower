@@ -174,6 +174,7 @@
     const tiles = new Array(GRID_WIDTH * GRID_HEIGHT).fill(1);
     const rng = mulberry32(seed >>> 0);
 
+    // Carve start area (bottom-left)
     for (let x = 1; x <= 3; x++) {
       for (let y = GRID_HEIGHT - 3; y < GRID_HEIGHT - 1; y++) {
         carveFloor(tiles, x, y);
@@ -184,6 +185,7 @@
       y: (GRID_HEIGHT - 2 + 0.5) * TILE_SIZE,
     };
 
+    // Carve exit area (top-right)
     for (let x = GRID_WIDTH - 4; x < GRID_WIDTH - 1; x++) {
       for (let y = 1; y <= 3; y++) {
         carveFloor(tiles, x, y);
